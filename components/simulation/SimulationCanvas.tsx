@@ -1,7 +1,7 @@
 "use client";
 
 import { Canvas } from "@react-three/fiber";
-import { OrbitControls } from "@react-three/drei";
+import { OrbitControls, AdaptiveDpr, Preload } from "@react-three/drei";
 import * as THREE from "three";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 
@@ -72,7 +72,6 @@ const PointMassMesh = memo(function PointMassMesh({ obj }: { obj: PointMass }) {
   const trailRef = useRef<THREE.Line | null>(null);
   const positionsRef = useRef<Float32Array | null>(null);
   const writeIndexRef = useRef(0);
-  const lastPosRef = useRef<THREE.Vector3 | null>(null);
 
   const radius = obj.radius ?? 0.2;
   const color = obj.color ?? "#ff5533";
@@ -88,29 +87,21 @@ const PointMassMesh = memo(function PointMassMesh({ obj }: { obj: PointMass }) {
     return geometry;
   }, [obj.trail?.enabled, obj.trail?.maxPoints]);
 
-  // Update trail each frame
+  // Append to trail when position changes (no extra timers)
   useEffect(() => {
     if (!trailRef.current || !trailGeo || !positionsRef.current) return;
     const line = trailRef.current;
     const geometry = trailGeo;
     const positions = positionsRef.current;
-
-    const interval = setInterval(() => {
-      const current = new THREE.Vector3(...obj.position);
-      if (!lastPosRef.current || !lastPosRef.current.equals(current)) {
-        const idx = writeIndexRef.current % (positions.length / 3);
-        positions[idx * 3 + 0] = current.x;
-        positions[idx * 3 + 1] = current.y;
-        positions[idx * 3 + 2] = current.z;
-        writeIndexRef.current++;
-        (geometry.getAttribute("position") as THREE.BufferAttribute).needsUpdate = true;
-        geometry.setDrawRange(0, Math.min(writeIndexRef.current, positions.length / 3));
-        lastPosRef.current = current;
-        line.geometry = geometry;
-      }
-    }, 50);
-
-    return () => clearInterval(interval);
+    const current = new THREE.Vector3(...obj.position);
+    const idx = writeIndexRef.current % (positions.length / 3);
+    positions[idx * 3 + 0] = current.x;
+    positions[idx * 3 + 1] = current.y;
+    positions[idx * 3 + 2] = current.z;
+    writeIndexRef.current++;
+    (geometry.getAttribute("position") as THREE.BufferAttribute).needsUpdate = true;
+    geometry.setDrawRange(0, Math.min(writeIndexRef.current, positions.length / 3));
+    line.geometry = geometry;
   }, [obj.position, trailGeo]);
 
   return (
@@ -252,7 +243,12 @@ export default function SimulationCanvas({ sceneConfig, onInit, showHelpers, cla
 
   return (
     <div className={className} style={style}>
-      <Canvas camera={{ position: [4, 3, 6], fov: 50 }}>
+      <Canvas
+        camera={{ position: [4, 3, 6], fov: 50 }}
+        dpr={[1, 2]}
+        shadows={false}
+        gl={{ antialias: true, powerPreference: "high-performance", alpha: false }}
+      >
         {/* Lights */}
         <ambientLight intensity={0.5} />
         <directionalLight position={[5, 5, 5]} intensity={0.8} />
@@ -270,6 +266,8 @@ export default function SimulationCanvas({ sceneConfig, onInit, showHelpers, cla
 
         {/* Controls */}
         <OrbitControls makeDefault enableDamping dampingFactor={0.1} />
+        <AdaptiveDpr pixelated />
+        <Preload all />
       </Canvas>
     </div>
   );
